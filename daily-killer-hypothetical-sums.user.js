@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Daily Killer Sudoku Assumed Sums
 // @namespace    daily-killer-enhance
-// @version      1.3.0
+// @version      1.4.0
 // @description  Add assumed sums to unlabeled cages and show their candidates in Combinations.
 // @match        https://www.dailykillersudoku.com/puzzle/*
 // @match        https://www.dailykillersudoku.com/m/puzzle/*
@@ -54,18 +54,19 @@
         panel.innerHTML = `
             <header><h2><button type="button" aria-label="Assumed Sum">Assume</button></h2></header>
             <form class="controls-inner">
-                <label id="dke-sum-title" for="dke-sum-value">Assumed Sum <small id="dke-cage-size"></small></label>
+                <label id="dke-sum-title" for="dke-sum-value">Assumed Sum</label>
                 <input id="dke-sum-value" type="text" class="calculator-input" inputmode="none"
                        autocomplete="off" aria-describedby="dke-sum-status">
+                <div class="dke-actions">
+                    <small id="dke-cage-size"></small>
+                    <button type="submit" class="dke-key">Save</button>
+                    <button id="dke-sum-clear" type="button" class="dke-key" aria-label="Clear assumed sum">Clear</button>
+                </div>
                 <div class="dke-keypad" role="group" aria-label="Assumed sum keypad">
                     ${Array.from('123456789', digit =>
                         `<button type="button" class="dke-key" data-key="${digit}">${digit}</button>`).join('')}
                     <button type="button" class="dke-key" data-key="0">0</button>
                     <button type="button" class="dke-key" data-key="Backspace" aria-label="Backspace">⌫</button>
-                </div>
-                <div class="dke-actions">
-                    <button type="submit" class="dke-key">Save</button>
-                    <button id="dke-sum-clear" type="button" class="dke-key" aria-label="Clear assumed sum">Clear</button>
                 </div>
                 <output id="dke-sum-status" role="status"></output>
             </form>`;
@@ -76,7 +77,6 @@
         const status = panel.querySelector('output');
         const keys = panel.querySelectorAll('[data-key]');
         const editableControls = panel.querySelectorAll('form input, form button:not(#dke-sum-clear)');
-        const compactTabs = window.matchMedia('(max-width: 767.97px)');
         document.getElementById('puzzleSmallMenu').before(panel);
         puzzle._tabs.add(window.$(panel), {
             onTabVisible() {},
@@ -93,28 +93,33 @@
             }
             #dke-sum-panel > header { display: none; }
             #dke-sum-panel > form.controls-inner {
-                display: grid; grid-template-columns: minmax(0, 1fr) minmax(42px, .58fr);
-                grid-template-rows: auto minmax(0, 1fr) auto; gap: 4px 6px;
+                display: grid; grid-template-columns: minmax(max-content, 1fr) minmax(34px, .55fr);
+                grid-template-rows: auto auto minmax(0, 1fr) auto; gap: 4px 6px;
                 height: 100%; padding: 4px; color: #fff; overflow: auto;
             }
             #dke-sum-title {
-                align-self: center; margin: 0; color: #fff;
-                font-weight: bold; font-size: clamp(13px, 3.7vmin, 18px);
+                align-self: center; margin: 0; color: #fff; white-space: nowrap;
+                font-weight: bold; font-size: clamp(12px, 3.7vmin, 18px);
             }
-            #dke-cage-size { color: #fff; font-size: .72em; font-weight: normal; white-space: nowrap; }
+            #dke-cage-size { color: #fff; font-size: .75em; white-space: nowrap; }
             #dke-sum-value.calculator-input {
                 width: 100%; height: 26px; padding: 0 3px; margin: 0;
                 font-size: 16px; text-align: center; box-sizing: border-box;
             }
             #dke-sum-panel .dke-keypad, #dke-sum-panel .dke-actions {
-                display: grid; gap: 1px; min-height: 0;
+                display: grid; grid-column: 1 / -1; min-height: 0;
             }
             #dke-sum-panel .dke-keypad {
+                gap: 1px;
                 grid-template-columns: repeat(3, minmax(0, 1fr));
-                grid-template-rows: repeat(4, minmax(18px, 1fr));
+                grid-template-rows: repeat(4, minmax(14px, 1fr));
             }
             #dke-sum-panel [data-key="Backspace"] { grid-column: span 2; }
-            #dke-sum-panel .dke-actions { grid-template-rows: repeat(2, minmax(28px, 1fr)); }
+            #dke-sum-panel .dke-actions {
+                grid-template-columns: 1fr repeat(2, minmax(34px, .7fr));
+                align-items: center; gap: 4px; min-height: 24px;
+            }
+            #dke-sum-panel .dke-actions button { height: 24px; }
             #dke-sum-panel .dke-key {
                 border: 0; border-radius: .18em; padding: 0; min-width: 0;
                 background: inherit; box-shadow: inset 0 0 0 1px rgba(255,255,255,.1);
@@ -184,12 +189,29 @@
             assumedCombinations.delete(cage);
         }
 
+        function combinationsFor(cage) {
+            if (!assumedCombinations.has(cage)) {
+                assumedCombinations.set(cage, new site.Combinations(
+                    sums.get(cage), cage.cells.length, board.size,
+                ));
+            }
+            return assumedCombinations.get(cage);
+        }
+
         for (const [cage, id] of cageIds) {
             if (cage.sum !== 0) continue;
             try {
                 restoreSum(cage, localStorage.getItem(storagePrefix + id));
             } catch {
-                break;
+                // Fill and Combinations can still run when browser storage is unavailable.
+            }
+            for (const cell of cage.cells) {
+                // Native context-sensitive Fill reads this method before editing the cell.
+                const nativePossibleValues = cell._allPossibleValues;
+                cell._allPossibleValues = function () {
+                    if (sums.has(cage)) return combinationsFor(cage).allPossibleValues();
+                    return nativePossibleValues.call(this);
+                };
             }
         }
 
@@ -220,13 +242,6 @@
             status.textContent = '';
         }
 
-        function openEditorForSingleCell() {
-            if (currentCage && board.highlightedCells.length === 1 &&
-                compactTabs.matches && document.documentElement.classList.contains('touchscreen-layout')) {
-                activateTab(panel);
-            }
-        }
-
         function activateTab(panel) {
             if (!panel.classList.contains('active')) panel.querySelector('header').click();
         }
@@ -242,16 +257,9 @@
                 cells.some((cell, index) => cell !== previousSelection[index]);
             if (newSelection) previousSelection = [...cells];
             updateEditor(editable);
-            if (newSelection) openEditorForSingleCell();
-
             const selectedCages = new Set(cells.map(cell => cell.cage));
             if (selectedCages.size === 1 && sums.has(cursorCage)) {
-                if (!assumedCombinations.has(cursorCage)) {
-                    assumedCombinations.set(cursorCage, new site.Combinations(
-                        sums.get(cursorCage), cursorCage.cells.length, board.size,
-                    ));
-                }
-                return this._combinations.setCombinations(assumedCombinations.get(cursorCage));
+                return this._combinations.setCombinations(combinationsFor(cursorCage));
             }
             if (selectedCages.size < 2 || ![...selectedCages].some(cage => cage.sum === 0)) {
                 if (!cells.length) this._combinations.clear();
@@ -277,10 +285,7 @@
 
         const canvas = boardElement.querySelector('.puzzle-canvas');
         for (const type of ['mousedown', 'touchstart']) {
-            canvas.addEventListener(type, () => {
-                input.blur();
-                openEditorForSingleCell();
-            });
+            canvas.addEventListener(type, () => input.blur());
             panel.addEventListener(type, event => event.stopPropagation());
         }
         for (const type of ['keydown', 'keyup']) {
