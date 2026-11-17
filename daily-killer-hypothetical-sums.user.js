@@ -1,9 +1,11 @@
 // ==UserScript==
 // @name         Daily Killer Sudoku Assumed Sums
 // @namespace    daily-killer-enhance
-// @version      1.4.0
+// @version      1.4.1
 // @description  Add assumed sums to unlabeled cages and show their candidates in Combinations.
 // @match        https://www.dailykillersudoku.com/puzzle/*
+// @match        https://www.dailykillersudoku.com/d/puzzle/*
+// @match        https://www.dailykillersudoku.com/k/puzzle/*
 // @match        https://www.dailykillersudoku.com/m/puzzle/*
 // @run-at       document-idle
 // @inject-into  page
@@ -14,7 +16,7 @@
 (() => {
     'use strict';
 
-    const puzzleId = location.pathname.match(/^\/(?:m\/)?puzzle\/(\d+)\/?$/)?.[1];
+    const puzzleId = location.pathname.match(/^\/(?:[dmk]\/)?puzzle\/(\d+)\/?$/)?.[1];
     const boardElement = document.getElementById('puzzleBoard');
     if (!puzzleId || !boardElement) return;
 
@@ -150,7 +152,7 @@
                     background: transparent; color: inherit; font: inherit;
                     writing-mode: inherit; text-orientation: inherit; text-shadow: inherit;
                 }
-                #dke-sum-panel:not(.active) > form { visibility: hidden; }
+                html.touchscreen-layout #dke-sum-panel:not(.active) > form { visibility: hidden; }
                 html.touchscreen-layout .content #dke-sum-panel > form.controls-inner { padding: 4px; }
             }
             @media (min-width: 768px) and (orientation: landscape) {
