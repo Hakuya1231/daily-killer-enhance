@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Daily Killer Sudoku Assumed Sums
 // @namespace    daily-killer-enhance
-// @version      1.4.1
+// @version      1.4.2
 // @description  Add assumed sums to unlabeled cages and show their candidates in Combinations.
 // @match        https://www.dailykillersudoku.com/puzzle/*
 // @match        https://www.dailykillersudoku.com/d/puzzle/*
@@ -283,6 +283,27 @@
             } else {
                 this._combinations.clear();
             }
+        };
+
+        // The site calls board.startAgain only after the user confirms the reset.
+        const nativeStartAgain = board.startAgain;
+        board.startAgain = function (...args) {
+            let storageError = false;
+            try {
+                for (const [cage, id] of cageIds) {
+                    if (cage.sum === 0) localStorage.removeItem(storagePrefix + id);
+                }
+            } catch {
+                storageError = true;
+            }
+            sums.clear();
+            assumedCombinations.clear();
+            previousSelection = [];
+            drawMarkers();
+            const result = nativeStartAgain.apply(this, args);
+            updateEditor(currentCage, true);
+            if (storageError) status.textContent = 'Browser storage is unavailable.';
+            return result;
         };
 
         const canvas = boardElement.querySelector('.puzzle-canvas');
